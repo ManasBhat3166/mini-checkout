@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini Checkout</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;color:#222}
+  table{width:100%;border-collapse:collapse;margin:.5rem 0}
+  th,td{text-align:left;padding:.4rem;border-bottom:1px solid #ddd}
+  td.num,th.num{text-align:right}
+  input[type=number]{width:3.5rem}
+  .err{color:#b00020;min-height:1.2em;margin:.25rem 0}
+  .ok{border:2px solid #1a7f37;background:#eaf7ee;padding:1rem;margin-top:1rem}
+  button{padding:.35rem .8rem;cursor:pointer}
+  #total{font-weight:bold}
+</style>
+</head>
+<body>
+<h1>Mini Store</h1>
+
+<section aria-labelledby="h-products">
+  <h2 id="h-products">Products</h2>
+  <table><tbody id="products"></tbody></table>
+</section>
+
+<section aria-labelledby="h-cart">
+  <h2 id="h-cart">Your cart</h2>
+  <p id="empty-msg" data-testid="empty-msg">Your cart is empty.</p>
+  <table id="cart-table" hidden>
+    <thead><tr><th>Item</th><th class="num">Price</th><th>Qty</th><th class="num">Line total</th><th></th></tr></thead>
+    <tbody id="cart"></tbody>
+  </table>
+  <p>Order total: <span id="total" data-testid="order-total">$0.00</span></p>
+  <p id="cart-error" class="err" role="alert" data-testid="cart-error"></p>
+</section>
+
+<section aria-labelledby="h-checkout">
+  <h2 id="h-checkout">Checkout</h2>
+  <label for="name">Full name (required)</label><br>
+  <input id="name" type="text" autocomplete="off" aria-describedby="name-error">
+  <p id="name-error" class="err" role="alert" data-testid="name-error"></p>
+  <button id="place-order" type="button">Place Order</button>
+</section>
+
+<div id="confirmation" class="ok" data-testid="confirmation" role="status" hidden>
+  <strong>Thank you, <span id="conf-name"></span>! Your order has been placed.</strong><br>
+  Order reference: <span id="conf-ref" data-testid="order-ref"></span><br>
+  Total paid: <span id="conf-total" data-testid="conf-total"></span><br><br>
+  <button id="new-order" type="button">Start new order</button>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var PRODUCTS = [
+    { id: "widget", name: "Widget", cents: 1250 },
+    { id: "gadget", name: "Gadget", cents: 800 }
+  ];
+  var MAX_QTY = 99;
+  var cart = {};          // id -> qty
+  var placed = false;     // set synchronously on first successful submit
+
+  var $ = function (id) { return document.getElementById(id); };
+  var money = function (c) { return "$" + (c / 100).toFixed(2); };
+  var find = function (id) { return PRODUCTS.filter(function (p) { return p.id === id; })[0]; };
+
+  function clampQty(v) {
+    v = parseInt(v, 10);
+    if (isNaN(v) || v < 1) return 1;
+    return Math.min(v, MAX_QTY);
+  }
+  function total() {
+    return Object.keys(cart).reduce(function (s, id) { return s + cart[id] * find(id).cents; }, 0);
+  }
+
+  function renderProducts() {
+    $("products").innerHTML = PRODUCTS.map(function (p) {
+      return '<tr><td>' + p.name + '</td><td class="num">' + money(p.cents) + '</td>' +
+        '<td class="num"><button type="button" data-add="' + p.id + '" data-testid="add-' + p.id + '">Add ' + p.name + '</button></td></tr>';
+    }).join("");
+  }
+
+  function renderCart() {
+    var ids = Object.keys(cart);
+    $("empty-msg").hidden = ids.length > 0;
+    $("cart-table").hidden = ids.length === 0;
+    $("cart").innerHTML = ids.map(function (id) {
+      var p = find(id), q = cart[id], dis = placed ? " disabled" : "";
+      return '<tr data-testid="row-' + id + '"><td>' + p.name + '</td><td class="num">' + money(p.cents) + '</td>' +
+        '<td><button type="button" data-dec="' + id + '" aria-label="Decrease ' + p.name + '"' + dis + '>−</button> ' +
+        '<input type="number" min="1" max="' + MAX_QTY + '" value="' + q + '" data-qty="' + id + '" aria-label="Quantity ' + p.name + '" data-testid="qty-' + id + '"' + dis + '> ' +
+        '<button type="button" data-inc="' + id + '" aria-label="Increase ' + p.name + '"' + dis + '>+</button></td>' +
+        '<td class="num" data-testid="line-' + id + '">' + money(p.cents * q) + '</td>' +
+        '<td><button type="button" data-remove="' + id + '" data-testid="remove-' + id + '"' + dis + '>Remove</button></td></tr>';
+    }).join("");
+    $("total").textContent = money(total());
+    document.querySelectorAll("[data-add]").forEach(function (b) { b.disabled = placed; });
+  }
+
+  function clearErrors() { $("cart-error").textContent = ""; $("name-error").textContent = ""; }
+
+  document.addEventListener("click", function (e) {
+    var t = e.target; if (placed || !t.dataset) return;
+    var d = t.dataset;
+    if (d.add)    cart[d.add] = Math.min((cart[d.add] || 0) + 1, MAX_QTY);
+    else if (d.inc) cart[d.inc] = Math.min(cart[d.inc] + 1, MAX_QTY);
+    else if (d.dec) { cart[d.dec] -= 1; if (cart[d.dec] < 1) delete cart[d.dec]; }
+    else if (d.remove) delete cart[d.remove];
+    else return;
+    clearErrors(); renderCart();
+  });
+
+  document.addEventListener("change", function (e) {
+    var id = e.target.dataset && e.target.dataset.qty;
+    if (!id || placed) return;
+    cart[id] = clampQty(e.target.value);
+    clearErrors(); renderCart();
+  });
+
+  $("name").addEventListener("input", function () { $("name-error").textContent = ""; });
+
+  $("place-order").addEventListener("click", function () {
+    if (placed) return;                       // guard against double-clicks
+    clearErrors();
+    var name = $("name").value.trim(), ok = true;
+    if (Object.keys(cart).length === 0) {
+      $("cart-error").textContent = "Your cart is empty. Add at least one item before placing an order.";
+      ok = false;
+    }
+    if (!name) {
+      $("name-error").textContent = "Please enter your full name.";
+      ok = false;
+    }
+    if (!ok) return;                          // inputs are left untouched
+
+    placed = true;                            // lock immediately (synchronous)
+    $("place-order").disabled = true;
+    $("name").disabled = true;
+    var ref = "ORD-" + Date.now().toString(36).toUpperCase().slice(-5) + Math.random().toString(36).slice(2, 5).toUpperCase();
+    $("conf-name").textContent = name;        // textContent: no HTML injection
+    $("conf-ref").textContent = ref;
+    $("conf-total").textContent = money(total());
+    $("confirmation").hidden = false;
+    renderCart();
+  });
+
+  $("new-order").addEventListener("click", function () {
+    cart = {}; placed = false;
+    $("name").value = ""; $("name").disabled = false; $("place-order").disabled = false;
+    $("confirmation").hidden = true; clearErrors(); renderCart();
+  });
+
+  renderProducts(); renderCart();
+})();
+</script>
+</body>
+</html>
