@@ -20,20 +20,20 @@ A single-page checkout (plain HTML/CSS/JS, no backend, no build step) and a Play
 - Success shows one confirmation with a reference (`ORD-XXXXXXXX`) and total. The page locks synchronously on the first successful submit and disables the button, so double-clicks cannot create a second confirmation.
 
 ## Run the app
-Open `index.html` in any browser (double-click it), or: `python3 -m http.server 8000` then visit http://localhost:8000.
+Open `index.html` in any browser (double-click it), or: `python -m http.server 8000` then visit http://localhost:8000.
 
 ## Run the browser tests
 Requires Python 3.9+.
 ```bash
 pip install pytest playwright
 playwright install chromium
-python3 -m pytest tests -v
+python -m pytest tests -v
 ```
 Each test launches a fresh browser context and reloads the page, so state never leaks between tests. Assertions use Playwright's auto-retrying `expect(...)` on visible text (no `sleep`/fixed waits).
 
 Optional - re-run the manual scenarios and regenerate screenshots:
 ```bash
-python3 tests/manual_exploratory.py
+python tests/manual_exploratory.py
 ```
 
 ## Manual browser steps (reproduce by hand)
